@@ -4,6 +4,7 @@ import authRouter from './auth.routes.js';
 import subscriptionsRouter from './subscriptions.routes.js';
 import userRouter from './user.routes.js';
 import { isDbEnabled, query } from '../config/db.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -28,7 +29,7 @@ router.get('/test-db', async (req, res, next) => {
     }
 });
 
-router.get('/summary', async (req, res, next) => {
+router.get('/summary', requireAuth, async (req, res, next) => {
     try {
         if (!isDbEnabled()) {
             return res.status(503).send({
@@ -37,18 +38,10 @@ router.get('/summary', async (req, res, next) => {
             });
         }
 
-        const { userId } = req.query ?? {};
-        if (userId !== undefined && (typeof userId !== 'string' || userId.trim().length === 0)) {
-            return res.status(400).send({ error: 'userId must be a non-empty string' });
-        }
+        const userId = req.user.id;
 
-        const values = [];
-        const where = [`status = 'active'`];
-
-        if (userId !== undefined) {
-            values.push(userId);
-            where.push(`user_id = $${values.length}`);
-        }
+        const values = [userId];
+        const where = [`status = 'active'`, `user_id = $1`];
 
         const whereSql = `WHERE ${where.join(' AND ')}`;
 
@@ -93,7 +86,6 @@ router.get('/summary', async (req, res, next) => {
 
         const toUpcoming = (row) => ({
             id: row.id,
-            userId: row.user_id,
             name: row.name,
             priceCents: row.price_cents,
             currency: row.currency,
@@ -102,6 +94,7 @@ router.get('/summary', async (req, res, next) => {
         });
 
         return res.send({
+            userId,
             monthlyTotalCents: totalsRow.monthly_total_cents,
             yearlyTotalCents: totalsRow.yearly_total_cents,
             upcoming7Days: upcoming7Result.rows.map(toUpcoming),
@@ -113,7 +106,7 @@ router.get('/summary', async (req, res, next) => {
 });
 
 router.use('/auth', authRouter);
-router.use('/subscriptions', subscriptionsRouter);
+router.use('/subscriptions', requireAuth, subscriptionsRouter);
 router.use('/users', userRouter);
 
 export default router;

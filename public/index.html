@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SubsTracker</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="container header">
+      <div>
+        <h1>SubsTracker</h1>
+        <p class="muted">Track your subscriptions and upcoming billing dates.</p>
+      </div>
+      <div class="header-actions">
+        <button id="signOutBtn" class="btn btn-secondary" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <main class="container">
+      <section id="status" class="card" hidden>
+        <div id="statusText"></div>
+      </section>
+
+      <section id="auth" class="grid" hidden>
+        <div class="card">
+          <h2>Create account</h2>
+          <form id="signUpForm" class="stack">
+            <label>
+              <div class="label">Email</div>
+              <input name="email" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              <div class="label">Password</div>
+              <input name="password" type="password" autocomplete="new-password" minlength="8" required />
+              <div class="hint">Minimum 8 characters</div>
+            </label>
+            <button class="btn" type="submit">Sign up</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Sign in</h2>
+          <form id="signInForm" class="stack">
+            <label>
+              <div class="label">Email</div>
+              <input name="email" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              <div class="label">Password</div>
+              <input name="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button class="btn" type="submit">Sign in</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="app" class="stack" hidden>
+        <div class="grid">
+          <div class="card">
+            <h2>Summary</h2>
+            <div class="summary">
+              <div>
+                <div class="metric-label">Monthly total</div>
+                <div id="monthlyTotal" class="metric-value">$0.00</div>
+              </div>
+              <div>
+                <div class="metric-label">Yearly total</div>
+                <div id="yearlyTotal" class="metric-value">$0.00</div>
+              </div>
+            </div>
+            <div class="split">
+              <div>
+                <h3>Upcoming (7 days)</h3>
+                <ul id="upcoming7" class="list"></ul>
+              </div>
+              <div>
+                <h3>Upcoming (30 days)</h3>
+                <ul id="upcoming30" class="list"></ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Add subscription</h2>
+            <form id="createSubForm" class="stack">
+              <label>
+                <div class="label">Name</div>
+                <input name="name" type="text" required />
+              </label>
+              <div class="row">
+                <label class="grow">
+                  <div class="label">Price (USD)</div>
+                  <input name="price" type="number" step="0.01" min="0" required />
+                </label>
+                <label>
+                  <div class="label">Cadence</div>
+                  <select name="cadence" required>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                <div class="label">Next billing date</div>
+                <input name="nextBillingDate" type="date" required />
+              </label>
+              <button class="btn" type="submit">Create</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row space-between">
+            <h2>Your subscriptions</h2>
+            <button id="refreshBtn" class="btn btn-secondary" type="button">Refresh</button>
+          </div>
+          <div id="subsEmpty" class="muted" hidden>No subscriptions yet.</div>
+          <div id="subsList" class="table" hidden></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

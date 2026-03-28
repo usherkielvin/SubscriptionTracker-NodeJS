@@ -16,6 +16,11 @@ subscriptionsRouter.use((req, res, next) => {
     return next();
 });
 
+subscriptionsRouter.use((req, res, next) => {
+    if (!req.user?.id) return res.status(401).send({ error: 'Unauthorized' });
+    return next();
+});
+
 function toSubscription(row) {
     return {
         id: row.id,
@@ -49,9 +54,14 @@ function isIsoDate(value) {
     return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function isUuid(value) {
+    if (!isNonEmptyString(value)) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 subscriptionsRouter.post('/', async (req, res, next) => {
     try {
-        const { userId, name, priceCents, currency, cadence, nextBillingDate } = req.body ?? {};
+        const { name, priceCents, currency, cadence, nextBillingDate } = req.body ?? {};
 
         if (!isNonEmptyString(name)) {
             return res.status(400).send({ error: 'name is required' });
@@ -68,11 +78,9 @@ subscriptionsRouter.post('/', async (req, res, next) => {
         if (currency !== undefined && !isNonEmptyString(currency)) {
             return res.status(400).send({ error: 'currency must be a non-empty string' });
         }
-        if (userId !== undefined && !isNonEmptyString(userId)) {
-            return res.status(400).send({ error: 'userId must be a non-empty string' });
-        }
 
         const id = randomUUID();
+        const userId = req.user?.id;
 
         const result = await query(
             `
@@ -80,7 +88,7 @@ subscriptionsRouter.post('/', async (req, res, next) => {
                 VALUES ($1, $2, $3, $4, COALESCE($5, 'USD'), $6, $7)
                 RETURNING *
             `,
-            [id, userId ?? null, name.trim(), priceCents, currency ?? null, cadence, nextBillingDate]
+            [id, userId, name.trim(), priceCents, currency ?? null, cadence, nextBillingDate]
         );
 
         return res.status(201).send({ subscription: toSubscription(result.rows[0]) });
@@ -91,16 +99,11 @@ subscriptionsRouter.post('/', async (req, res, next) => {
 
 subscriptionsRouter.get('/', async (req, res, next) => {
     try {
-        const { userId, status } = req.query ?? {};
+        const { status } = req.query ?? {};
+        const userId = req.user?.id;
 
-        const values = [];
-        const where = [];
-
-        if (userId !== undefined) {
-            if (!isNonEmptyString(userId)) return res.status(400).send({ error: 'userId must be a non-empty string' });
-            values.push(userId);
-            where.push(`user_id = $${values.length}`);
-        }
+        const values = [userId];
+        const where = ['user_id = $1'];
 
         if (status !== undefined) {
             if (!isStatus(status)) return res.status(400).send({ error: "status must be 'active' or 'canceled'" });
@@ -108,7 +111,7 @@ subscriptionsRouter.get('/', async (req, res, next) => {
             where.push(`status = $${values.length}`);
         }
 
-        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        const whereSql = `WHERE ${where.join(' AND ')}`;
 
         const result = await query(
             `
@@ -129,10 +132,45 @@ subscriptionsRouter.get('/', async (req, res, next) => {
 subscriptionsRouter.get('/:id', async (req, res, next) => {
     try {
         const { id } = req.params;
+        const userId = req.user?.id;
 
-        const result = await query(`SELECT * FROM subscriptions WHERE id = $1`, [id]);
+        if (!isUuid(id)) return res.status(400).send({ error: 'Invalid subscription id' });
+
+        const result = await query(`SELECT * FROM subscriptions WHERE id = $1 AND user_id = $2`, [id, userId]);
         const row = result.rows[0];
 
+        if (!row) return res.status(404).send({ error: 'Subscription not found' });
+
+        return res.send({ subscription: toSubscription(row) });
+    } catch (err) {
+        return next(err);
+    }
+});
+
+subscriptionsRouter.post('/:id/pay', async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.id;
+
+        if (!isUuid(id)) return res.status(400).send({ error: 'Invalid subscription id' });
+
+        const result = await query(
+            `
+                UPDATE subscriptions
+                SET
+                    next_billing_date =
+                        CASE
+                            WHEN cadence = 'monthly' THEN (next_billing_date + INTERVAL '1 month')::date
+                            ELSE (next_billing_date + INTERVAL '1 year')::date
+                        END,
+                    updated_at = now()
+                WHERE id = $1 AND user_id = $2 AND status = 'active'
+                RETURNING *
+            `,
+            [id, userId]
+        );
+
+        const row = result.rows[0];
         if (!row) return res.status(404).send({ error: 'Subscription not found' });
 
         return res.send({ subscription: toSubscription(row) });
@@ -144,18 +182,13 @@ subscriptionsRouter.get('/:id', async (req, res, next) => {
 subscriptionsRouter.patch('/:id', async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { userId, name, priceCents, currency, cadence, nextBillingDate, status } = req.body ?? {};
+        const { name, priceCents, currency, cadence, nextBillingDate, status } = req.body ?? {};
+        const userId = req.user?.id;
+
+        if (!isUuid(id)) return res.status(400).send({ error: 'Invalid subscription id' });
 
         const sets = [];
         const values = [];
-
-        if (userId !== undefined) {
-            if (userId !== null && !isNonEmptyString(userId)) {
-                return res.status(400).send({ error: 'userId must be a non-empty string or null' });
-            }
-            values.push(userId);
-            sets.push(`user_id = $${values.length}`);
-        }
 
         if (name !== undefined) {
             if (!isNonEmptyString(name)) return res.status(400).send({ error: 'name must be a non-empty string' });
@@ -203,11 +236,12 @@ subscriptionsRouter.patch('/:id', async (req, res, next) => {
         if (!sets.length) return res.status(400).send({ error: 'No valid fields to update' });
 
         values.push(id);
+        values.push(userId);
         const result = await query(
             `
                 UPDATE subscriptions
                 SET ${sets.join(', ')}, updated_at = now()
-                WHERE id = $${values.length}
+                WHERE id = $${values.length - 1} AND user_id = $${values.length}
                 RETURNING *
             `,
             values
@@ -225,15 +259,18 @@ subscriptionsRouter.patch('/:id', async (req, res, next) => {
 subscriptionsRouter.delete('/:id', async (req, res, next) => {
     try {
         const { id } = req.params;
+        const userId = req.user?.id;
+
+        if (!isUuid(id)) return res.status(400).send({ error: 'Invalid subscription id' });
 
         const result = await query(
             `
                 UPDATE subscriptions
                 SET status = 'canceled', canceled_at = COALESCE(canceled_at, now()), updated_at = now()
-                WHERE id = $1
+                WHERE id = $1 AND user_id = $2
                 RETURNING *
             `,
-            [id]
+            [id, userId]
         );
 
         const row = result.rows[0];

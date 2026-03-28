@@ -36,6 +36,35 @@ export async function initDb() {
     await query('SELECT 1');
 
     await query(`
+        CREATE TABLE IF NOT EXISTS users (
+            id uuid PRIMARY KEY,
+            email text NOT NULL UNIQUE,
+            password_hash text NOT NULL,
+            password_salt text NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now()
+        );
+    `);
+
+    await query(`
+        CREATE TABLE IF NOT EXISTS sessions (
+            id uuid PRIMARY KEY,
+            user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            expires_at timestamptz NOT NULL
+        );
+    `);
+
+    await query(`
+        CREATE INDEX IF NOT EXISTS sessions_user_id_idx
+        ON sessions (user_id);
+    `);
+
+    await query(`
+        CREATE INDEX IF NOT EXISTS sessions_expires_at_idx
+        ON sessions (expires_at);
+    `);
+
+    await query(`
         CREATE TABLE IF NOT EXISTS subscriptions (
             id uuid PRIMARY KEY,
             user_id text,

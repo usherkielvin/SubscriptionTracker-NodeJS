@@ -1,21 +1,23 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import morgan from 'morgan';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { PORT } from './config/env.js';
 import { initDb } from './config/db.js';
 import routes from './routes/index.js';
 
 const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-app.get('/', (req, res) => {
-    res.send({ name: 'SubsTracker', status: 'running' });
-});
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use('/api', routes);
 
