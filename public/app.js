@@ -13,6 +13,8 @@ const monthlyTotal = document.getElementById('monthlyTotal');
 const yearlyTotal = document.getElementById('yearlyTotal');
 const upcoming7 = document.getElementById('upcoming7');
 const upcoming30 = document.getElementById('upcoming30');
+const overdueEmpty = document.getElementById('overdueEmpty');
+const overdueList = document.getElementById('overdueList');
 
 const subsEmpty = document.getElementById('subsEmpty');
 const subsList = document.getElementById('subsList');
@@ -113,6 +115,44 @@ function renderUpcoming(el, items) {
         const li = document.createElement('li');
         li.textContent = `${item.name} • ${formatMoney(item.priceCents)} • ${formatDate(item.nextBillingDate)}`;
         el.appendChild(li);
+    }
+}
+
+function renderOverdue(items) {
+    clearList(overdueList);
+    if (!items?.length) {
+        overdueEmpty.hidden = false;
+        return;
+    }
+
+    overdueEmpty.hidden = true;
+    for (const item of items) {
+        const li = document.createElement('li');
+        const row = document.createElement('div');
+        row.className = 'row space-between';
+
+        const text = document.createElement('div');
+        text.textContent = `${item.name} • ${formatMoney(item.priceCents)} • ${formatDate(item.nextBillingDate)}`;
+
+        const pay = document.createElement('button');
+        pay.type = 'button';
+        pay.className = 'btn btn-secondary';
+        pay.textContent = 'Pay';
+        pay.addEventListener('click', async () => {
+            setStatus('', null);
+            try {
+                await api(`/api/subscriptions/${item.id}/pay`, { method: 'POST' });
+                await refreshAll();
+                setStatus('Marked as paid.', 'success');
+            } catch (err) {
+                setStatus(err.message, 'error');
+            }
+        });
+
+        row.appendChild(text);
+        row.appendChild(pay);
+        li.appendChild(row);
+        overdueList.appendChild(li);
     }
 }
 
@@ -221,8 +261,13 @@ async function refreshSubs() {
     renderSubs(subs);
 }
 
+async function refreshOverdue() {
+    const data = await api('/api/subscriptions/overdue');
+    renderOverdue(data.subscriptions ?? []);
+}
+
 async function refreshAll() {
-    await Promise.all([refreshSummary(), refreshSubs()]);
+    await Promise.all([refreshSummary(), refreshOverdue(), refreshSubs()]);
 }
 
 async function bootstrap() {

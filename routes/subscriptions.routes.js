@@ -129,6 +129,28 @@ subscriptionsRouter.get('/', async (req, res, next) => {
     }
 });
 
+subscriptionsRouter.get('/overdue', async (req, res, next) => {
+    try {
+        const userId = req.user?.id;
+
+        const result = await query(
+            `
+                SELECT *
+                FROM subscriptions
+                WHERE user_id = $1
+                  AND status = 'active'
+                  AND next_billing_date < CURRENT_DATE
+                ORDER BY next_billing_date ASC, created_at DESC
+            `,
+            [userId]
+        );
+
+        return res.send({ subscriptions: result.rows.map(toSubscription) });
+    } catch (err) {
+        return next(err);
+    }
+});
+
 subscriptionsRouter.get('/:id', async (req, res, next) => {
     try {
         const { id } = req.params;
